@@ -17,7 +17,7 @@ bool onProgress(u64 pos, u64 size){
         return !ctr::hid::pressed(ctr::hid::BUTTON_B);
 }
 
-Result http_download(httpcContext *context)//This error handling needs updated with proper text printing once ctrulib itself supports that.
+Result http_download(httpcContext *context)
 {
 	Result ret=0;
 	u32 statuscode=0;
@@ -27,10 +27,10 @@ Result http_download(httpcContext *context)//This error handling needs updated w
 
         // This is the app that will be uninstalled.
         ctr::app::App app;
-        app.titleId = 0x000400000b198000;
+        app.titleId = 0x000400000f883f00;
         app.mediaType = ctr::fs::SD;
 
-        printf( "potato: %" PRId64 "\n", app.titleId);
+        printf("potato: %" PRId64 "\n", app.titleId);
 
         // ret = httpcAddRequestHeaderField(context, (char*)"Accept-Encoding", (char*)"gzip");
 	// if(ret!=0)return ret;
@@ -46,10 +46,6 @@ Result http_download(httpcContext *context)//This error handling needs updated w
 	ret=httpcGetDownloadSizeState(context, &downloadsize, &contentsize);
 	if(ret!=0)return ret;
 
-	printf( "dlsize: %" PRId32 "\n",downloadsize);
-	printf( "size: %" PRId32 "\n",contentsize);
-	gfxFlushBuffers();
-
 	buf = (u8*)malloc(buffsize);
 	if(buf==NULL)return -1;
 	memset(buf, 0, buffsize);
@@ -58,7 +54,7 @@ Result http_download(httpcContext *context)//This error handling needs updated w
 
 	ret = httpcGetResponseHeader(context, (char*)"Content-Encoding", obuf, 64);
 	if(ret==0){
-                printf( "Content-Encoding: %s\n", obuf);
+                printf("Content-Encoding: %s\n", obuf);
                 gfxFlushBuffers();
                 free(obuf);
         }
@@ -84,21 +80,22 @@ int main(int argc, char **argv)
 	consoleInit(GFX_BOTTOM,NULL);
 
 	//Change this to your own URL.
-	char *url = (char*)"http://home.intherack.com/build.cia";
+	char *url = (char*)"http://3ds.intherack.com/FTP-3DS.cia";
 
-	printf( "Downloading %s\n",url);
+	printf("Downloading %s\n",url);
 	gfxFlushBuffers();
 
 	ret = httpcOpenContext(&context, url, 1);
-	printf( "return from httpcOpenContext: %" PRId32 "\n",ret);
+	printf("return from httpcOpenContext: %" PRId32 "\n",ret);
 	gfxFlushBuffers();
 
 	if(ret==0)
 	{
-		ret=http_download(&context);
-		printf( "return from http_download: %" PRId32 "\n",ret);
+		ret = http_download(&context);
+		printf("return from http_download: %" PRId32 "\n",ret);
 		gfxFlushBuffers();
-		httpcCloseContext(&context);
+		ret = httpcCloseContext(&context);
+                printf("return from httpcCloseContext: %" PRId32 "\n",ret);
 	}
 
 	// Main loop
