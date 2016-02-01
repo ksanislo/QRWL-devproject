@@ -32,8 +32,8 @@ Result http_download(httpcContext *context)
 
         printf("potato: %" PRId64 "\n", app.titleId);
 
-        // ret = httpcAddRequestHeaderField(context, (char*)"Accept-Encoding", (char*)"gzip");
-	// if(ret!=0)return ret;
+        ret = httpcAddRequestHeaderField(context, (char*)"Accept-Encoding", (char*)"gzip");
+        if(ret!=0)return ret;
 
 	ret = httpcBeginRequest(context);
 	if(ret!=0)return ret;
@@ -70,7 +70,6 @@ Result http_download(httpcContext *context)
 
 int main(int argc, char **argv)
 {
-        ctr::core::init(argc);
 	Result ret=0;
 	httpcContext context;
 
@@ -85,17 +84,20 @@ int main(int argc, char **argv)
 	printf("Downloading %s\n",url);
 	gfxFlushBuffers();
 
-	ret = httpcOpenContext(&context, url, 1);
+	ret = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 1);
 	printf("return from httpcOpenContext: %" PRId32 "\n",ret);
 	gfxFlushBuffers();
 
 	if(ret==0)
 	{
+        	ctr::core::init(argc);
 		ret = http_download(&context);
 		printf("return from http_download: %" PRId32 "\n",ret);
 		gfxFlushBuffers();
 		ret = httpcCloseContext(&context);
                 printf("return from httpcCloseContext: %" PRId32 "\n",ret);
+		gfxFlushBuffers();
+        	ctr::core::exit();
 	}
 
 	// Main loop
@@ -118,7 +120,6 @@ int main(int argc, char **argv)
 	// Exit services
 	httpcExit();
 	gfxExit();
-        ctr::core::exit();
 	return 0;
 }
 
