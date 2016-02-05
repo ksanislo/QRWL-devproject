@@ -50,22 +50,34 @@ Result http_download(httpcContext *context)
 	if(buf==NULL)return -1;
 	memset(buf, 0, buffsize);
 
-        obuf = (char*)malloc(64);
+        obuf = (char*)malloc(16);
 
-	ret = httpcGetResponseHeader(context, (char*)"Content-Encoding", obuf, 64);
-	if(ret==0){
+	if(httpcGetResponseHeader(context, (char*)"Content-Encoding", obuf, 16)==0){
                 printf("Content-Encoding: %s\n", obuf);
                 gfxFlushBuffers();
-                free(obuf);
         }
+        free(obuf);
+
+	//u32 size=0, count=0;
+	//ret = (s32)HTTPC_RESULTCODE_DOWNLOADPENDING;
+	//while (ret==(s32)HTTPC_RESULTCODE_DOWNLOADPENDING) {
+	//	ret=httpcDownloadData(context, buf, buffsize, &size);
+	//	printf("return: 0x%lx size: %" PRId32 "\n", ret, size);
+	//	gfxFlushBuffers();
+	//	count += size;
+	//}
+	//printf("count: %lu\n", count);
+	//ret=httpcGetDownloadSizeState(context, &size, NULL);
+	//printf("size: %lu\n", size);
 
         // We should check if this title exists first, but...
         ctr::app::uninstall(app);
-        ctr::app::install(ctr::fs::SD, context, &onProgress);
+        ctr::app::install(ctr::fs::SD, context, 0, &onProgress);
+
 
 	free(buf);
 
-	return 0;
+	return ret;
 }
 
 int main(int argc, char **argv)
