@@ -32,7 +32,7 @@ Result http_download(httpcContext *context)
 
         printf("potato: %" PRId64 "\n", app.titleId);
 
-        ret = httpcAddRequestHeaderField(context, (char*)"Accept-Encoding", (char*)"gzip");
+        ret = httpcAddRequestHeaderField(context, (char*)"Accept-Encoding", (char*)"gzip, deflate");
         if(ret!=0)return ret;
 
 	ret = httpcBeginRequest(context);
@@ -87,11 +87,16 @@ int main(int argc, char **argv)
 
 	gfxInitDefault();
 	httpcInit();
+	srvInit();
+
+	aptInit();
+	hidInit();
+	//gfxInit();
 
 	consoleInit(GFX_BOTTOM,NULL);
 
 	//Change this to your own URL.
-	char *url = (char*)"http://3ds.intherack.com/FTP-3DS.cia";
+	char *url = (char*)"http://3ds.intherack.com/devproject.cia";
 
 	printf("Downloading %s\n",url);
 	gfxFlushBuffers();
@@ -132,6 +137,9 @@ int main(int argc, char **argv)
 	// Exit services
 	httpcExit();
 	gfxExit();
+	hidExit();
+	aptExit();
+	srvExit();
 	return 0;
 }
 
