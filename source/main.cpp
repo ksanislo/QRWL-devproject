@@ -55,7 +55,7 @@ Result http_getinfo(char *url, ctr::app::App *app) {
         buf = (u8*)malloc(64);
 
         if(httpcGetResponseHeader(&context, (char*)"Content-Range", (char*)buf, 64)==0){
-		char *ptr = strchr((const char *)buf, 47); 
+		char *ptr = strchr((const char *)buf, 47);
 	        printf("Content-Range: %s\n", &ptr[1]);
                 gfxFlushBuffers();
 		app->size = atoll(&ptr[1]);
