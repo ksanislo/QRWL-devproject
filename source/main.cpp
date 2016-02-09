@@ -10,7 +10,7 @@
 
 #include <3ds.h>
 
-bool onProgress(u64 pos, u64 size) {       
+bool onProgress(u64 pos, u64 size) {
         printf("pos: %" PRId32 "-%" PRId32 "\n", (u32)pos, (u32)size);
         gfxFlushBuffers();
         ctr::hid::poll();
@@ -186,7 +186,7 @@ int main(int argc, char **argv)
 	// Exit services
 	httpcExit();
 	hidExit();
-       	ctr::core::exit();
+	ctr::core::exit();
 
 	return 0;
 }
