@@ -1,4 +1,4 @@
-include <citrus/app.hpp>
+#include <citrus/app.hpp>
 #include <citrus/core.hpp>
 #include <citrus/fs.hpp>
 #include <citrus/gpu.hpp>
@@ -13,17 +13,17 @@ using namespace ctr;
 
 bool onProgress(u64 pos, u64 size) {
         printf("pos: %" PRId64 "-%" PRId64 "\n", pos, size);
-        ctr::gpu::flushBuffer();
-        ctr::hid::poll();
-        return !ctr::hid::pressed(ctr::hid::BUTTON_B);
+        gpu::flushBuffer();
+        hid::poll();
+        return !hid::pressed(hid::BUTTON_B);
 }
 
-Result http_getinfo(char *url, ctr::app::App *app) {
+Result http_getinfo(char *url, app::App *app) {
 	Result ret=0;
 	u32 statuscode=0;
 	httpcContext context;
 
-        app->mediaType = ctr::fs::SD;
+        app->mediaType = fs::SD;
 	app->size = 0;
 	app->titleId = 0x0000000000000000;
 
@@ -67,7 +67,7 @@ Result http_getinfo(char *url, ctr::app::App *app) {
 	return 0;
 }
 
-Result http_download(char *url, ctr::app::App *app) {
+Result http_download(char *url, app::App *app) {
 	Result ret=0;
 	httpcContext context;
 	u32 statuscode=0;
@@ -99,7 +99,7 @@ Result http_download(char *url, ctr::app::App *app) {
                 printf("Content-Encoding: %s\n", buf);
         }
 
-        ctr::app::install(app->mediaType, &context, app->size, &onProgress);
+        app::install(app->mediaType, &context, app->size, &onProgress);
 
 	free(buf);
 
@@ -113,54 +113,54 @@ int main(int argc, char **argv)
 {
 	Result ret=0;
 
-        ctr::core::init(argc);
+        core::init(argc);
 	httpcInit();
 
 	consoleInit(GFX_BOTTOM,NULL);
 
-	ctr::app::App app;
+	app::App app;
 
 	//Change this to your own URL.
 	char *url = (char*)"http://3ds.intherack.com/devproject.cia";
 
 	printf("Downloading %s\n",url);
-	ctr::gpu::flushBuffer();
+	gpu::flushBuffer();
 
 	ret = http_getinfo(url, &app);
 	if(ret!=0)return ret;
 
-	if(app.titleId != 0 && ctr::app::installed(app)) { // Check if we have a titleId to remove
+	if(app.titleId != 0 && app::installed(app)) { // Check if we have a titleId to remove
 		printf("Uninstalling titleId: 0x%llx\n", app.titleId);
-		ctr::gpu::flushBuffer();
-		ctr::app::uninstall(app);
+		gpu::flushBuffer();
+		app::uninstall(app);
 	}
 
 	ret = http_download(url, &app);
 	if(ret!=0)return ret;
 
 	printf("titleId: 0x%llx\nInstall finished.\nPress START to close.\n", app.titleId);
-	ctr::gpu::flushBuffer();
+	gpu::flushBuffer();
 
 
 	// Main loop
-	while (ctr::core::running())
+	while (core::running())
 	{
-		ctr::hid::poll();
+		hid::poll();
 
 		// Your code goes here
 
-		if (ctr::hid::pressed(ctr::hid::BUTTON_START))
+		if (hid::pressed(hid::BUTTON_START))
 			break; // break in order to return to hbmenu
 
 		// Flush and swap framebuffers
 		
-		ctr::gpu::flushBuffer();
-		ctr::gpu::swapBuffers(true);
+		gpu::flushBuffer();
+		gpu::swapBuffers(true);
 	}
 
 	// Exit services
 	httpcExit();
-	ctr::core::exit();
+	core::exit();
 
 	return 0;
 }
