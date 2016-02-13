@@ -153,7 +153,6 @@ int main(int argc, char **argv)
 			break; // break in order to return to hbmenu
 
 		// Flush and swap framebuffers
-		
 		gpu::flushBuffer();
 		gpu::swapBuffers(true);
 	}
