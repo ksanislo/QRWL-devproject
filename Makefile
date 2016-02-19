@@ -25,7 +25,7 @@ SOURCE_DIRS := source
 EXTRA_OUTPUT_FILES :=
 
 LIBRARY_DIRS := $(DEVKITPRO)/citrus $(DEVKITPRO)/libctru $(DEVKITPRO)/portlibs/armv6k
-LIBRARIES := citrus ctru m
+LIBRARIES := quirc citrus ctru m 
 
 BUILD_FLAGS :=
 RUN_FLAGS :=
@@ -43,7 +43,7 @@ SYSTEM_MODE_EXT := Legacy
 
 ICON_FLAGS :=
 
-ROMFS_DIR :=
+ROMFS_DIR := romfs/
 BANNER_AUDIO := meta/audio.wav
 BANNER_IMAGE := meta/banner.png
 ICON := meta/icon.png
