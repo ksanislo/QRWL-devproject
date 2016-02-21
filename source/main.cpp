@@ -123,28 +123,18 @@ Result http_download(char *url, app::App *app) {
 
 void takePicture(u16 *buf) {
 	u32 bufSize;
-	printf("CAMU_GetMaxBytes: 0x%08X\n", (unsigned int) CAMU_GetMaxBytes(&bufSize, WIDTH, HEIGHT));
-	printf("CAMU_SetTransferBytes: 0x%08X\n", (unsigned int) CAMU_SetTransferBytes(PORT_CAM1, bufSize, WIDTH, HEIGHT));
-
-	printf("CAMU_Activate: 0x%08X\n", (unsigned int) CAMU_Activate(SELECT_OUT1));
-
 	Handle camReceiveEvent = 0;
 
-	printf("CAMU_ClearBuffer: 0x%08X\n", (unsigned int) CAMU_ClearBuffer(PORT_CAM1));
-	//printf("CAMU_SynchronizeVsyncTiming: 0x%08X\n", (unsigned int) CAMU_SynchronizeVsyncTiming(SELECT_OUT1, SELECT_OUT2));
-
-	printf("CAMU_StartCapture: 0x%08X\n", (unsigned int) CAMU_StartCapture(PORT_CAM1));
-
-	printf("CAMU_SetReceiving: 0x%08X\n", (unsigned int) CAMU_SetReceiving(&camReceiveEvent, (u8*)buf, PORT_CAM1, WIDTH * HEIGHT * 2, (s16) bufSize));
-	printf("svcWaitSynchronization: 0x%08X\n", (unsigned int) svcWaitSynchronization(camReceiveEvent, WAIT_TIMEOUT));
-	//printf("CAMU_PlayShutterSound: 0x%08X\n", (unsigned int) CAMU_PlayShutterSound(SHUTTER_SOUND_TYPE_NORMAL));
-
-	printf("CAMU_StopCapture: 0x%08X\n", (unsigned int) CAMU_StopCapture(PORT_CAM1));
-
+	CAMU_GetMaxBytes(&bufSize, WIDTH, HEIGHT);
+	CAMU_SetTransferBytes(PORT_CAM1, bufSize, WIDTH, HEIGHT);
+	CAMU_Activate(SELECT_OUT1);
+	CAMU_ClearBuffer(PORT_CAM1);
+	CAMU_StartCapture(PORT_CAM1);
+	CAMU_SetReceiving(&camReceiveEvent, (u8*)buf, PORT_CAM1, WIDTH * HEIGHT * 2, (s16) bufSize);
+	svcWaitSynchronization(camReceiveEvent, WAIT_TIMEOUT);
+	CAMU_StopCapture(PORT_CAM1);
 	svcCloseHandle(camReceiveEvent);
-
-	printf("CAMU_Activate: 0x%08X\n", (unsigned int) CAMU_Activate(SELECT_NONE));
-
+	CAMU_Activate(SELECT_NONE);
 }
 
 void writePictureToIntensityMap(void *fb, void *img, u16 width, u16 height) {
@@ -159,50 +149,74 @@ void writePictureToIntensityMap(void *fb, void *img, u16 width, u16 height) {
         }
 }
 
+int doWebInstall (char *url) {
+	app::App app;
+	Result ret=0;
+	
+	printf("Processing %s\n",url);
+	gpu::flushBuffer();
+
+	ret = http_getinfo(url, &app);
+	if(ret!=0)return ret;
+
+	printf("titleId: 0x%llx\n", app.titleId);
+	printf("Press A to install\n      X to uninstall\n      B to cancel.\n");
+	while (core::running()) {
+		hid::poll();
+
+		if (hid::pressed(hid::BUTTON_X)) {
+			if(app.titleId != 0 && app::installed(app)) { // Check if we have a titleId to remove
+				printf("Uninstalling...");
+				gpu::flushBuffer();
+				gpu::swapBuffers(true);
+				app::uninstall(app);
+				printf("done.\n");
+				gpu::flushBuffer();
+			} else {
+				printf("titleId isn't installed\n");
+				gpu::flushBuffer();
+				gpu::swapBuffers(true);
+			}
+		}
+
+		if (hid::pressed(hid::BUTTON_A)) {
+			ret = http_download(url, &app);
+			if(ret!=0)return ret;
+
+			printf("titleId: 0x%llx\nInstall finished.\n", app.titleId);
+			gpu::flushBuffer();
+			return ret;
+		}
+			
+
+		if (hid::pressed(hid::BUTTON_B))
+			break;
+			
+
+	}
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
-	Result ret=0;
-
         core::init(argc);
 	httpcInit();
 	camInit();
 
 	consoleInit(GFX_BOTTOM,NULL);
 
-	app::App app;
-
-	//Change this to your own URL.
-	char *url = (char*)"http://3ds.intherack.com/devproject.cia";
-/*
-	printf("Downloading %s\n",url);
+	printf("Initializing camera...");
 	gpu::flushBuffer();
-
-	ret = http_getinfo(url, &app);
-	if(ret!=0)return ret;
-
-	if(app.titleId != 0 && app::installed(app)) { // Check if we have a titleId to remove
-		printf("Uninstalling titleId: 0x%llx\n", app.titleId);
-		gpu::flushBuffer();
-		app::uninstall(app);
-	}
-
-	ret = http_download(url, &app);
-	if(ret!=0)return ret;
-
-	printf("titleId: 0x%llx\nInstall finished.\nPress START to close.\n", app.titleId);
+	gpu::swapBuffers(true);
+	CAMU_SetSize(SELECT_OUT1, SIZE_VGA, CONTEXT_A);
+	CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A);
+	CAMU_SetNoiseFilter(SELECT_OUT1, true);
+	CAMU_SetAutoExposure(SELECT_OUT1, true);
+	CAMU_SetAutoWhiteBalance(SELECT_OUT1, true);
+	CAMU_SetTrimming(PORT_CAM1, false);
+	printf("done.\n");
 	gpu::flushBuffer();
-*/
-
-	printf("CAMU_SetSize: 0x%08X\n", (unsigned int) CAMU_SetSize(SELECT_OUT1, SIZE_VGA, CONTEXT_A));
-	printf("CAMU_SetOutputFormat: 0x%08X\n", (unsigned int) CAMU_SetOutputFormat(SELECT_OUT1, OUTPUT_RGB_565, CONTEXT_A));
-
-	printf("CAMU_SetNoiseFilter: 0x%08X\n", (unsigned int) CAMU_SetNoiseFilter(SELECT_OUT1, true));
-	printf("CAMU_SetAutoExposure: 0x%08X\n", (unsigned int) CAMU_SetAutoExposure(SELECT_OUT1, true));
-	printf("CAMU_SetAutoWhiteBalance: 0x%08X\n", (unsigned int) CAMU_SetAutoWhiteBalance(SELECT_OUT1, true));
-	//printf("CAMU_SetEffect: 0x%08X\n", (unsigned int) CAMU_SetEffect(SELECT_OUT1, EFFECT_MONO, CONTEXT_A));
-
-	printf("CAMU_SetTrimming: 0x%08X\n", (unsigned int) CAMU_SetTrimming(PORT_CAM1, false));
-
+	gpu::swapBuffers(true);
 
 	u16 *camBuf = (u16*)malloc(WIDTH * HEIGHT * 2);
 	if(!camBuf) {
@@ -223,6 +237,7 @@ int main(int argc, char **argv)
 		return 0;
 	}
 
+	printf("Watching for QR codes...\nPress START to exit.\n");
 	// Main loop
 	while (core::running())
 	{
@@ -233,31 +248,30 @@ int main(int argc, char **argv)
 		if (hid::pressed(hid::BUTTON_START))
 			break; // break in order to return to hbmenu
 
-		if (hid::pressed(hid::BUTTON_R)) {
-			takePicture(camBuf);
+		takePicture(camBuf);
 
-			int w=WIDTH, h=HEIGHT;
+		int w=WIDTH, h=HEIGHT;
 
-			u8 *image = (u8*)quirc_begin(qr, &w, &h);
-			writePictureToIntensityMap(image, camBuf, WIDTH, HEIGHT);
-			quirc_end(qr);
+		u8 *image = (u8*)quirc_begin(qr, &w, &h);
+		writePictureToIntensityMap(image, camBuf, WIDTH, HEIGHT);
+		quirc_end(qr);
 
-			int num_codes = quirc_count(qr);
-			printf("num_codes: %i\n", num_codes);
-			gpu::flushBuffer();
-			for (int i = 0; i < num_codes; i++) {
-				struct quirc_code code;
-				struct quirc_data data;
-				quirc_decode_error_t err;
+		int num_codes = quirc_count(qr);
+		gpu::flushBuffer();
+		for (int i = 0; i < num_codes; i++) {
+			struct quirc_code code;
+			struct quirc_data data;
+			quirc_decode_error_t err;
 
-				quirc_extract(qr, i, &code);
+			quirc_extract(qr, i, &code);
 
-				err = quirc_decode(&code, &data);
-				if (err)
-					printf("DECODE FAILED: %s\n", quirc_strerror(err));
-				else
-					printf("Data: %s\n", data.payload);
+			err = quirc_decode(&code, &data);
+			if (!err) {
+				doWebInstall((char*)data.payload);
+				printf("Watching for QR codes...\nPress START to exit.\n");
 			}
+			// else	printf("DECODE FAILED: %s\n", quirc_strerror(err));
+	
 		}
 
 		// Flush and swap framebuffers
@@ -265,6 +279,9 @@ int main(int argc, char **argv)
 		gpu::swapBuffers(true);
 	}
 
+	printf("Cleaning up...");
+	gpu::flushBuffer();
+	gpu::swapBuffers(true);
 	quirc_destroy(qr);
 
 	free(camBuf);
@@ -272,8 +289,11 @@ int main(int argc, char **argv)
 	// Exit services
 	camExit();
 	httpcExit();
-	core::exit();
+	printf("done.\n");
+	gpu::flushBuffer();
 
+	core::exit();
+	
 	return 0;
 }
 
