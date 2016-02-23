@@ -149,16 +149,28 @@ void writePictureToIntensityMap(void *fb, void *img, u16 width, u16 height) {
         }
 }
 
+/*
+void downsampleVGAtoQVGA(void *fb, void *img) {
+	u16 *fb_16 = (u16*) fb;
+	u16 *img_16 = (u16*) img;
+	for(x = 0; x < 640; x=+2) {
+		for(y = 0; y < 480; y=+2) {
+		fb_16[((x/2) * 240 + (y/2)) / 2] = img_16[x * 640 + y]
+		}
+	}
+
+}
+*/
+
 void writePictureToFramebufferRGB565(void *fb, void *img, u16 x, u16 y, u16 width, u16 height) {
         u8 *fb_8 = (u8*) fb;
         u16 *img_16 = (u16*) img;
-        int i, j, draw_x, draw_y;
-        for(j = 0; j < height; j=j+2) {
-                for(i = 0; i < width; i=i+2) {
-                        draw_y = y + height - j;
-                        draw_x = x + i;
-                        u32 v = (draw_y + draw_x * height) * 3;
-                        u16 data = img_16[j * width + i];
+        for(int j = 0; j < height; j++) {
+                for(int i = 0; i < width; i++) {
+                        int draw_y = y + (height - j)/2;
+                        int draw_x = x + i/2;
+                        u32 v = (draw_y + draw_x * (height/2)) * 3;
+			u16 data = img_16[j * width + i];
                         uint8_t b = ((data >> 11) & 0x1F) << 3;
                         uint8_t g = ((data >> 5) & 0x3F) << 2;
                         uint8_t r = (data & 0x1F) << 3;
@@ -222,6 +234,9 @@ int main(int argc, char **argv)
         core::init(argc);
 	httpcInit();
 	camInit();
+
+	gfxSetDoubleBuffering(GFX_TOP, true);
+	gfxSetDoubleBuffering(GFX_BOTTOM, false);
 
 	consoleInit(GFX_BOTTOM,NULL);
 	gfxSet3D(false);
