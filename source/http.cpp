@@ -12,12 +12,12 @@ extern "C" {
 #include <quirc.h>
 }
 
+#include "autoloader.h"
 #include "common.h"
 
 using namespace ctr;
 
 bool onProgress(u64 pos, u64 size);
-int useAutoloader(char *url, app::App app);
 
 Result http_getinfo(char *url, app::App *app){
 	Result ret=0;
@@ -178,7 +178,7 @@ int doWebInstall (char *url){
 		return -1;
 	}
 
-	printf("titleId: 0x%llx\n", app.titleId);
+	printf("titleId: 0x%016llx\n", app.titleId);
 	if (app.titleId == TITLEID) printf("This .cia matches our titleId, direct\ninstall and uninstall disabled.\n");
 	printf("Press B to cancel\n");
 	if (app.titleId != AUTOLOADER_TITLEID) printf("      Y to use Autoloader\n");
@@ -203,7 +203,7 @@ int doWebInstall (char *url){
 			ret = http_download(url, &app);
 			if(ret!=0)return ret;
 
-			printf("titleId: 0x%llx\nInstall finished.\n", app.titleId);
+			printf("titleId: 0x%016llx\nInstall finished.\n", app.titleId);
 			return ret;
 		}
 
