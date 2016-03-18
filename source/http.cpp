@@ -19,11 +19,16 @@ using namespace ctr;
 
 bool onProgress(u64 pos, u64 size);
 
+static httpcContext context;
+
+int fetchHttpData(void *buf, u32 bufSize, u32 *bufFill){
+	return httpcDownloadData(&context, (u8*)buf, bufSize, bufFill);
+}
+
 Result http_getinfo(char *url, app::App *app){
 	Result ret=0;
 	u8* buf;
 	u32 statuscode=0;
-	httpcContext context;
 
 	app->mediaType = fs::SD;
 	app->size = 0;
@@ -104,7 +109,6 @@ Result http_getinfo(char *url, app::App *app){
 
 Result http_download(char *url, app::App *app){
 	Result ret=0;
-	httpcContext context;
 	u32 statuscode=0;
 	u32 contentsize=0, downloadsize=0;
 	char *buf;
@@ -114,10 +118,12 @@ Result http_download(char *url, app::App *app){
 		goto stop;
 	}
 
+	/* No gzip until libarchive is implemented.
 	ret = httpcAddRequestHeaderField(&context, (char*)"Accept-Encoding", (char*)"gzip, deflate");
 	if(ret!=0){
 		goto stop;
 	}
+	*/
 
 	// Disable the SSL certificate checks.
 	ret = httpcSetSSLOpt(&context, 1<<9);
@@ -151,7 +157,7 @@ Result http_download(char *url, app::App *app){
 			printf("Content-Encoding: %s\n", buf);
 		}
 
-		app::install(app->mediaType, &context, app->size, &onProgress);
+		app::install(app->mediaType, &fetchHttpData, app->size, &onProgress);
 
 		free(buf);
 	} else {
