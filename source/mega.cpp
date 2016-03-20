@@ -62,6 +62,7 @@ int decodeMegaFileName(char *filename, char *buf) {
 	mbedtls_aes_setkey_dec( &aes, aeskey, 128 );
 	jsonbuf = (char*)malloc(olen);
 	mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, olen, &zeroiv[0], (unsigned char*) buf, (unsigned char*) jsonbuf);
+	mbedtls_aes_free( &aes );
 	if(strncmp("MEGA",jsonbuf, 4)!=0){
 		return 1;
 	}
@@ -138,6 +139,8 @@ int fetchMegaData(void *buf, u32 bufSize, u32 *bufFill){
 
 	char *startptr, *endptr;
 	u32 startpos = 0;
+	u32 decodepos = 0;
+	size_t chunksize = 0;
 
 	size_t offset=0;
 
@@ -174,18 +177,19 @@ int fetchMegaData(void *buf, u32 bufSize, u32 *bufFill){
 
 	aesiv_64[1] = swap_uint64((u64)startpos/16); // Set our IV block location.
 	offset = startpos % 16; // Set our starting block offset
-	if(offset != 0){
+
+	if(offset != 0){ // If we have an offset, we need to pre-fill stream_block
 		mbedtls_aes_crypt_ecb( &aes, MBEDTLS_AES_ENCRYPT, aesiv, stream_block );
 		aesiv_64[1] = swap_uint64(((u64)startpos/16) + 1); // Bump counter
 	}
 
-//for (decodepos = 0;  decodepos < *bufFill ; decodepos+=0xFFFF) {
-//	chunksize = (((*bufFill - decodepos) < 0xFFFF) ? (*bufFill - decodepos) : 0xFFFF );
-//	printf("cs: %u\n", chunksize);
-	mbedtls_aes_crypt_ctr( &aes, (size_t)*bufFill, &offset, aesiv, stream_block, dlbuf, (unsigned char*)buf );
-//	if (decodepos + chunksize == *bufFill) break;
-//}
+	for (decodepos = 0;  decodepos < *bufFill ; decodepos+=0x1000) { // AES decrypt in 4K blocks (chunksize must be u16, not u32)
+		chunksize = (((*bufFill - decodepos) < 0x1000) ? (*bufFill - decodepos) : 0x1000 );
+		mbedtls_aes_crypt_ctr( &aes, chunksize, &offset, aesiv, stream_block, dlbuf+decodepos, (unsigned char*)buf+decodepos );
+		if (decodepos + chunksize == *bufFill) break;
+	}
 
+	mbedtls_aes_free( &aes );
 	free(dlbuf);
 
 stop:
@@ -237,7 +241,7 @@ int doMegaInstall (char *url){
 	u32 bufFill;
 	char *filename;
 
-u32 statuscode;
+	u32 statuscode;
 
 	// Allocate space for 128 bit AES key and 128 bit AES IV
 	aeskey = (u8*)malloc(128 / 8);
@@ -279,6 +283,9 @@ ret = httpcDownloadData(&context, buf, 0x1000, &bufLen);
 filename = (char*)malloc(0x1000);
 parseMegaFileResponse((char*)buf, filename, &filesize, url);
 httpcCloseContext(&context);
+printf("file: %s\nsize: %lu\nurl: %s\n", filename, filesize, url);
+app.size = filesize;
+app.mediaType = fs::SD;
 free(filename);
 
 ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
@@ -286,11 +293,9 @@ ret=httpcSetSSLOpt(&context, 1<<9);
 ret=httpcAddRequestHeaderField(&context, (char*)"Range", (char*)"bytes=11292-11299");
 ret=httpcBeginRequest(&context);
 
-buf = (u8*)realloc(buf, 8);
+//buf = (u8*)realloc(buf, 8);
 fetchMegaData(buf, 8, &bufFill);
 app.titleId = ((u64)buf[0]<<56|(u64)buf[1]<<48|(u64)buf[2]<<40|(u64)buf[3]<<32|(u64)buf[4]<<24|(u64)buf[5]<<16|(u64)buf[6]<<8|(u64)buf[7]);
-app.size = filesize;
-app.mediaType = fs::SD;
 printf("titleId: %016llx\n", app.titleId);
 httpcCloseContext(&context);
 
@@ -298,7 +303,7 @@ ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
 ret=httpcSetSSLOpt(&context, 1<<9);
 ret=httpcBeginRequest(&context);
 httpcGetResponseStatusCode(&context, &statuscode, 0); 
-//app::install(fs::SD, &fetchMegaData, 0, &onProgress);
+app::install(app.mediaType, &fetchMegaData, app.size, &onProgress);
 httpcCloseContext(&context);
 
 stop:
