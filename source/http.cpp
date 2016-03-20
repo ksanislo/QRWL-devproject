@@ -46,6 +46,10 @@ Result http_getinfo(char *url, app::App *app){
 		goto stop;
 	}
 
+u32 downloadpos, contentsize;
+ret = httpcGetDownloadSizeState(&context, &downloadpos, &contentsize);
+printf("at: %lu\nsize: %lu\n", downloadpos, contentsize);
+
 	// Disable the SSL certificate checks.
 	ret = httpcSetSSLOpt(&context, SSLOPTION_NOVERIFY);
 	if(ret!=0){
@@ -110,7 +114,6 @@ Result http_getinfo(char *url, app::App *app){
 Result http_download(char *url, app::App *app){
 	Result ret=0;
 	u32 statuscode=0;
-	u32 contentsize=0, downloadsize=0;
 	char *buf;
 
 	ret = httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
@@ -141,11 +144,6 @@ Result http_download(char *url, app::App *app){
 		goto stop;
 	}
 	if(statuscode==200){
-		ret = httpcGetDownloadSizeState(&context, &downloadsize, &contentsize);
-		if(ret!=0){
-			goto stop;
-		}
-
 		buf = (char*)malloc(16);
 		if(buf==NULL){
 			goto stop;
