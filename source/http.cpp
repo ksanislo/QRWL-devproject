@@ -196,6 +196,7 @@ int doWebInstall (char *url){
 			printf("Uninstalling...");
 			app::uninstall(app);
 			printf("done.\n");
+			return 0;
 		}
 
 		if (hid::pressed(hid::BUTTON_Y)){
