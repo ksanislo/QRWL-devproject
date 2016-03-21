@@ -104,7 +104,7 @@ int main(int argc, char **argv){
 			err = quirc_decode(&code, &data);
 			if (!err){
 				CAMU_Activate(SELECT_NONE);
-				if (strncmp((const char *)data.payload, "https://mega.nz/", 16)==0)
+				if (strncmp((const char *)data.payload, "https://mega.nz/", 16)==0 || strncmp((const char *)data.payload, "https://mega.co.nz/", 19)==0)
 					doMegaInstall((char*)data.payload);
 				else 
 					doWebInstall((char*)data.payload);

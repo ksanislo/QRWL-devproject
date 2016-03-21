@@ -55,7 +55,6 @@ int decodeMegaFileName(char *filename, char *buf) {
 	strcpy(filename, buf); // store in our return filename for temp space
 
 	mbedtls_base64_decode(NULL, 0, &olen, (const unsigned char*)filename, strlen(filename));
-
 	buf = (char*)realloc(buf, olen);
 	mbedtls_base64_decode((unsigned char*)buf, olen, &olen, (const unsigned char*)filename, strlen(filename));
 
@@ -64,7 +63,8 @@ int decodeMegaFileName(char *filename, char *buf) {
 	jsonbuf = (char*)malloc(olen);
 	mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, olen, &zeroiv[0], (unsigned char*) buf, (unsigned char*) jsonbuf);
 	mbedtls_aes_free( &aes );
-	if(strncmp("MEGA",jsonbuf, 4)!=0){
+	if(strncmp("MEGA", jsonbuf, 4)!=0){
+		printf("MEGA magic string not found.\nDecryption key bad/missing?\n");
 		return 1;
 	}
 	jsonbuf+=4; // Bypass header.

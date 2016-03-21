@@ -11,8 +11,10 @@ void configCamera(){
 	CAMU_SetContrast(SELECT_OUT1, CONTRAST_NORMAL);
 	CAMU_SetAutoExposure(SELECT_OUT1, true);
 	CAMU_SetAutoWhiteBalance(SELECT_OUT1, true);
-	CAMU_SetAutoExposureWindow(SELECT_OUT1, 100, 20, 200, 200);
-	CAMU_SetAutoWhiteBalanceWindow(SELECT_OUT1, 100, 20, 400, 200);
+//	CAMU_SetAutoExposureWindow(SELECT_OUT1, 100, 20, 200, 200);
+//	CAMU_SetAutoWhiteBalanceWindow(SELECT_OUT1, 100, 20, 400, 200);
+	CAMU_SetAutoExposureWindow(SELECT_OUT1, 0, 0, 400, 240);
+	CAMU_SetAutoWhiteBalanceWindow(SELECT_OUT1, 0, 0, 400, 240);
 	CAMU_SetTrimming(PORT_CAM1, false);
         CAMU_Activate(SELECT_OUT1);
 }
