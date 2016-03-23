@@ -14,7 +14,7 @@ extern "C" {
 
 using namespace ctr;
 
-static u8 *aeskey, *aesiv;
+static u8 *megaInstallKey, *megaInstallIV;
 static httpcContext context;
 
 
@@ -34,7 +34,7 @@ int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 	return -1;
 }
 
-int decodeMegaFileName(char *filename, char *buf) {
+int decodeMegaAttributes(char *buf, u8 *aeskey, char *filename) {
 	int i, r, c;
 	int len = strlen(buf);
 	size_t olen;
@@ -92,7 +92,7 @@ int decodeMegaFileName(char *filename, char *buf) {
 	return 0;
 }
 
-int parseMegaFileResponse(char *jsonString, char *filename, u32 *size, char* url) {
+int parseMegaFileResponse(char *jsonString, u8 *aeskey, char *filename, u32 *size, char* url) {
 	int i, r;
 	char *buf;
 	jsmn_parser p;
@@ -122,7 +122,7 @@ int parseMegaFileResponse(char *jsonString, char *filename, u32 *size, char* url
 			memset(buf,0,t[i+1].end-t[i+1].start + 1 + ((t[i+1].end-t[i+1].start * 3) & 0x03));
 			strncpy(buf,jsonString + t[i+1].start,t[i+1].end-t[i+1].start);
 			buf[t[i+1].end-t[i+1].start + ((t[i+1].end-t[i+1].start * 3) & 0x03)] = (char)NULL;
-			decodeMegaFileName(filename, buf);
+			decodeMegaAttributes(buf, aeskey, filename);
 			free(buf);
 			i++;
 		} else if (jsoneq(jsonString, &t[i], "g") == 0) { // url
@@ -137,6 +137,8 @@ int parseMegaFileResponse(char *jsonString, char *filename, u32 *size, char* url
 int fetchMegaData(void *buf, u32 bufSize, u32 *bufFill){
         Result ret = 0;
 	u32 downloadpos = 0;
+	u8 *aeskey = megaInstallKey;
+	u8 *aesiv = megaInstallIV;
 	u64 *aesiv_64 = (u64*) aesiv;
 
 	char *startptr, *endptr;
@@ -197,7 +199,7 @@ stop:
 	return ret;
 }
 
-int decodeMegaFileKey(char* str)
+int decodeMegaAESKey(char *str, u8 *aeskey, u8 *aesiv)
 {
 	u64 *aeskey_64 = (u64*) aeskey;
 	u64 *aesiv_64 = (u64*) aesiv;
@@ -220,33 +222,26 @@ int decodeMegaFileKey(char* str)
 	}
 
 	buf = (u8*)malloc(256/8);
+	memset(buf, 0, 256/8);
+
 	int ret = mbedtls_base64_decode((unsigned char*)buf, (256/8), &olen, (const unsigned char*)str, newlen);
 	buf_64 = (u64*) buf;
 	aeskey_64[0] = buf_64[0] ^ buf_64[2];
 	aeskey_64[1] = buf_64[1] ^ buf_64[3];
 	aesiv_64[0] = buf_64[2];
 	aesiv_64[1] = 0;
+
 	free(buf);
 	return ret;
 }
 
-int prepareMegaInstall (char *url, app::App *app){
+int decodeMegaURL (char *url, char *nodeId, u8 *aeskey, u8 *aesiv){
 	Result ret=0;
 
 	char *ptr, *locptr, *keyptr;
-	u8 *req, *buf;
-	u32 bufLen;
-	int reqlen;
-	u32 filesize;
-	char *filename;
-	char megafileid[128];
-
-	// Allocate space for 128 bit AES key and 128 bit AES IV
-	aeskey = (u8*)malloc(128 / 8);
-	aesiv = (u8*)malloc(128 / 8);
 
 	// Allocate URL length+4 bytes since we may need to pad with =
-	buf = (u8*)malloc(strlen(url)+4);
+	u8 *buf = (u8*)malloc(strlen(url)+4);
 	strcpy((char*)buf, url);
 	ptr = strchr((const char *)buf, '#');
 	if (ptr[1] != '!'){
@@ -258,44 +253,24 @@ int prepareMegaInstall (char *url, app::App *app){
 	keyptr = strchr((const char *)locptr, '!');
 	keyptr++[0] = (char)NULL; // end prev string
 
-	strncpy(megafileid, locptr, sizeof(megafileid));
+	strncpy(nodeId, locptr, strlen(locptr));
 
-	// Decode the URL for our AES key
-	decodeMegaFileKey(keyptr);
+	decodeMegaAESKey(keyptr, aeskey, aesiv);
 
-	req = (u8*)malloc(256);
-	reqlen = sprintf((char*)req, "[{\"a\":\"g\",\"g\":1,\"p\":\"%s\"}]", megafileid);
-
-	httpcOpenContext(&context, HTTPC_METHOD_POST, (char*)"https://g.api.mega.co.nz/cs", 0);
-	httpcSetSSLOpt(&context, 1<<9);
-	httpcAddPostDataRaw(&context, (u32*)req, reqlen);
-
-	httpcBeginRequest(&context);
-
-	buf = (u8*)realloc(buf, 0x1000);
-	ret = httpcDownloadData(&context, buf, 0x1000, &bufLen);
-	free(req);
-
-	filename = (char*)malloc(0x1000);
-	parseMegaFileResponse((char*)buf, filename, &filesize, url);
-	httpcCloseContext(&context);
-	printf("file: %s\nsize: %lu\n", filename, filesize);
-
-	app->size = filesize;
-	app->mediaType = fs::SD;
-
-	free(filename);
 stop:
 	free(buf);
 	return ret;
 }
 
-int getMegaInfo (char *url, app::App *app){
+int getMegaTitleId (char *url, u8 *aeskey, u8 *aesiv, app::App *app){
         Result ret=0;
 
 	u8 *buf;
 	u32 bufFill;
 	u32 statuscode;
+
+	megaInstallKey = aeskey;
+	megaInstallIV = aesiv;
 
 	ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
 	ret=httpcSetSSLOpt(&context, 1<<9);
@@ -311,9 +286,12 @@ int getMegaInfo (char *url, app::App *app){
 	return ret;
 }
 
-int getMegaDownload (char *url, app::App *app){
+int doMegaInstallCIA (char *url, u8 *aeskey, u8 *aesiv, app::App *app){
         Result ret=0;
 	u32 statuscode;
+
+	megaInstallKey = aeskey;
+	megaInstallIV = aesiv;
 
 	ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
 	ret=httpcSetSSLOpt(&context, 1<<9);
@@ -324,20 +302,74 @@ int getMegaDownload (char *url, app::App *app){
 	return ret;
 }
 
-void cleanupMegaInstall() {
-        free(aeskey);
-        free(aesiv);
+void requestMegaFolderInfo(char *url, char *nodeId, u8 *aeskey) {
+
 }
+
+int requestMegaFileInfo (char *url, char *nodeId, u8 *aeskey, u8 *aesiv, app::App *app){
+	Result ret=0;
+
+	u8 *req, *buf;
+	u32 bufLen;
+	int reqlen;
+	u32 filesize;
+	char *filename;
+
+	req = (u8*)malloc(256);
+	reqlen = sprintf((char*)req, "[{\"a\":\"g\",\"g\":1,\"p\":\"%s\"}]", nodeId);
+
+	httpcOpenContext(&context, HTTPC_METHOD_POST, (char*)"https://g.api.mega.co.nz/cs", 0);
+	httpcSetSSLOpt(&context, 1<<9);
+	httpcAddPostDataRaw(&context, (u32*)req, reqlen);
+
+	httpcBeginRequest(&context);
+
+	buf = (u8*)malloc(0x1000);
+	ret = httpcDownloadData(&context, buf, 0x1000, &bufLen);
+	free(req);
+
+	filename = (char*)malloc(0x1000);
+	parseMegaFileResponse((char*)buf, aeskey, filename, &filesize, url);
+	httpcCloseContext(&context);
+	printf("file: %s\nsize: %lu\n", filename, filesize);
+
+	app->size = filesize;
+	app->mediaType = fs::SD;
+
+	free(filename);
+	free(buf);
+	return ret;
+}
+
+
 
 int doMegaInstall (char *url){
 	app::App app;
 	Result ret=0;
+	char *ptr;
+
+	u8 *aeskey, *aesiv;
+
+	char *nodeId;
+	nodeId = (char*)malloc(16);
+
+	// Allocate space for 128 bit AES key and 128 bit AES IV
+	aeskey = (u8*)malloc(128 / 8);
+	aesiv = (u8*)malloc(128 / 8);
 
 	printf("Processing %s\n",url);
 
-	prepareMegaInstall(url, &app);
+	ptr = strchr((const char *)url, '#');
+	if (ptr[1] == 'F'){
+		requestMegaFolderInfo(url, nodeId, aeskey);
+		return 0;
+	}
 
-	ret = getMegaInfo(url, &app);
+	decodeMegaURL(url, nodeId, aeskey, aesiv);
+
+	requestMegaFileInfo(url, nodeId, aeskey, aesiv, &app);
+
+	ret = getMegaTitleId(url, aeskey, aesiv, &app);
 	if(ret!=0)return ret;
 
 	if(app.titleId>>48 != 0x4){ // 3DS titleId
@@ -362,7 +394,7 @@ int doMegaInstall (char *url){
 		}
 
 		if (hid::pressed(hid::BUTTON_A) && app.titleId != TITLEID && ! app::installed(app)){
-			ret = getMegaDownload(url, &app);
+			ret = doMegaInstallCIA(url, aeskey, aesiv, &app);
 			if(ret!=0)return ret;
 
 			printf("titleId: 0x%016llx\nInstall finished.\n", app.titleId);
@@ -372,6 +404,9 @@ int doMegaInstall (char *url){
 		if (hid::pressed(hid::BUTTON_B))
 			break;
 	}
+	free(nodeId);
+	free(aeskey);
+	free(aesiv);
 	return 0;
 }
 
