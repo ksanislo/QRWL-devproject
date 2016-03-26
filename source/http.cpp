@@ -46,10 +46,6 @@ Result http_getinfo(char *url, app::App *app){
 		goto stop;
 	}
 
-u32 downloadpos, contentsize;
-ret = httpcGetDownloadSizeState(&context, &downloadpos, &contentsize);
-printf("at: %lu\nsize: %lu\n", downloadpos, contentsize);
-
 	// Disable the SSL certificate checks.
 	ret = httpcSetSSLOpt(&context, SSLOPTION_NOVERIFY);
 	if(ret!=0){
@@ -67,13 +63,13 @@ printf("at: %lu\nsize: %lu\n", downloadpos, contentsize);
 	}
 
 	if(statuscode==301||statuscode==302){
-		ret = httpcGetResponseHeader(&context, (char*)"Location", (char*)url, QUIRC_MAX_PAYLOAD-1);
+		ret = httpcGetResponseHeader(&context, (char*)"Location", (char*)url, QUIRC_MAX_PAYLOAD);
 		if(ret!=0){
 			goto stop;
 		}
-
+		ret=httpcCloseContext(&context);
 		ret=http_getinfo(url, app);
-		goto stop;
+		goto exit;
 	}
 
 	if(statuscode==206){
@@ -107,7 +103,7 @@ printf("at: %lu\nsize: %lu\n", downloadpos, contentsize);
 
 	stop:
 	ret = httpcCloseContext(&context);
-
+	exit:
 	return ret;
 }
 

@@ -2,6 +2,9 @@
 #include <citrus/core.hpp>
 #include <citrus/hid.hpp>
 
+#include <stdio.h>
+#include <string.h>
+
 #include "http.h"
 #include "autoloader.h"
 #include "common.h"
