@@ -25,7 +25,7 @@ SOURCE_DIRS := source
 EXTRA_OUTPUT_FILES :=
 
 LIBRARY_DIRS := $(DEVKITPRO)/citrus $(DEVKITPRO)/libctru $(DEVKITPRO)/portlibs/armv6k
-LIBRARIES := quirc mbedtls mbedcrypto jsmn citrus ctru m 
+LIBRARIES := quirc mbedtls mbedcrypto jansson citrus ctru m 
 
 BUILD_FLAGS :=
 RUN_FLAGS :=

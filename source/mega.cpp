@@ -6,7 +6,7 @@
 #include <mbedtls/aes.h>
 
 extern "C" {
-#include <jsmn.h>
+#include <jansson.h>
 }
 
 #include "mega.h"
@@ -16,6 +16,7 @@ using namespace ctr;
 
 static u8 *megaInstallKey, *megaInstallIV;
 static httpcContext context;
+FILE *logfile;
 
 uint64_t swap_uint64( uint64_t val ) {
     val = ((val << 8) & 0xFF00FF00FF00FF00ULL ) | ((val >> 8) & 0x00FF00FF00FF00FFULL );
@@ -23,117 +24,137 @@ uint64_t swap_uint64( uint64_t val ) {
     return (val << 32) | (val >> 32);
 }
 
-int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
-	if (tok->type == JSMN_STRING && (int) strlen(s) == tok->end - tok->start &&
-			strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
-		return 0;
-	}
-	return -1;
-}
+int parseMegaFileAttributes(char *buf, char *filename) {
+	json_t *data, *n;
+	json_error_t error;
 
-
-// TODO: This needs rebuilt with the new func()s
-int decodeMegaAttributes(char *buf, u8 *aeskey, char *filename) {
-	int i, r, c;
-	int len = strlen(buf);
-	size_t olen;
-	unsigned char zeroiv[16]={0};
-	char *jsonbuf;
-	jsmn_parser p;
-	jsmntok_t t[128]; // We expect no more than 128 tokens
-
-	for(c = 0; c < len + ((len * 3) & 0x03); c++){
-		if(buf[c] == '-')
-			buf[c] = '+';
-		else if(buf[c] == '_')
-			buf[c] = '/';
-		if (c >= len)
-			buf[c] = '=';
-	}
-
-	strcpy(filename, buf); // store in our return filename for temp space
-
-	mbedtls_base64_decode(NULL, 0, &olen, (const unsigned char*)filename, strlen(filename));
-	mbedtls_base64_decode((unsigned char*)buf, olen, &olen, (const unsigned char*)filename, strlen(filename));
-
-	mbedtls_aes_context aes;
-	mbedtls_aes_setkey_dec( &aes, aeskey, 128 );
-	jsonbuf = (char*)malloc(olen);
-	mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, olen, &zeroiv[0], (unsigned char*) buf, (unsigned char*) jsonbuf);
-	printf("json: %s\n", jsonbuf);
-	mbedtls_aes_free( &aes );
-	if(strncmp("MEGA", jsonbuf, 4)!=0){
-		printf("MEGA magic string not found.\nDecryption key bad/missing?\n");
+	if(strncmp("MEGA", buf, 4)!=0){
+		fprintf(logfile, "MEGA magic string not found.\nDecryption key bad/missing?\n");
 		return 1;
 	}
-	jsonbuf+=4; // Bypass header.
+	buf+=4; // Skip over MEGA magic.
 
-	r = jsmn_parse(&p, jsonbuf, strlen(jsonbuf), t, sizeof(t)/sizeof(t[0]));
-	if (r < 0) {
-		printf("Failed to parse JSON: %d\n", r);
+
+	data = json_loads(buf, 0, &error);
+
+	if (!data) {
+		fprintf(logfile, "Failed to parse JSON: %s\n", error.text);
+		filename[0] = 0; //end string
+//svcSleepThread(5000000000);
 		return 1;
 	}
 
-	if (r < 1 || t[0].type != JSMN_OBJECT) {
-		printf("Object expected\n");
-		return 1;
-	}
+	n = json_object_get(data, "n");
+	strcpy(filename, json_string_value(n));
 
-	for (i = 1; i < r; i++) {
-		if (jsoneq(jsonbuf, &t[i], "n") == 0) {
-			strncpy(filename,jsonbuf + t[i+1].start,t[i+1].end-t[i+1].start);
-			filename[t[i+1].end-t[i+1].start] = (char)NULL;
-			i++;
-		}
-	}
+	//printf("filename: %s\n", filename);
 
-	free(jsonbuf-4); // Free the original jsonbuf 
+	json_decref(data);
 	return 0;
 }
 
-int parseMegaFolderResponse(char *jsonString, u8 *aeskey, char *url) {
+int parseMegaFolderResponse(char *buf, u8 *aeskey, void *folderList) {
+	fileList myList;
+	char *enckey, *attributes;
+	size_t i, olen;
+	json_t *root, *rootdata, *f, *data;
+	json_error_t error;
+
+	root = json_loads(buf, 0, &error);
+
+	if (!root) {
+		fprintf(logfile, "Failed to parse JSON: %s\n", error.text);
+		return 1;
+	}
+
+	enckey = (char*)malloc(0x100);
+	attributes = (char*)malloc(0x400);
+
+	rootdata = json_array_get(root, 0);
+	f = json_object_get(rootdata, "f");
+	for(i = 0; i < json_array_size(f); i++) {
+		//json_t *a, *h, *k, *p, *s, *t, *ts, *u;
+		json_t *a, *h, *k, *s, *t, *ts;
+
+		data = json_array_get(f, i);
+
+		t = json_object_get(data, "t");
+                if(json_integer_value(t) == MEGA_NODETYPE_FILE){
+
+			k = json_object_get(data, "k");
+			strcpy(enckey, strchr(json_string_value(k), ':')+1);
+			decodeMegaAESKey(decryptBufferECB(decodeURLbase64(enckey, &olen), olen, aeskey), &myList.aeskey[0], &myList.aesiv[0]);
+			
+			a = json_object_get(data, "a");
+			strcpy(attributes, json_string_value(a));
+			//parseMegaFileAttributes(decryptStringCBC(decodeURLbase64(attributes, &olen), olen, myList.aeskey), myList.fileName);
+			decodeURLbase64(attributes, &olen);
+			decryptStringCBC(attributes, olen, myList.aeskey);
+			parseMegaFileAttributes(attributes, myList.fileName);
+
+			h = json_object_get(data, "h");
+			strcpy(myList.nodeId, json_string_value(h));
+
+			s = json_object_get(data, "s");
+			myList.size = json_integer_value(s);
+
+			ts = json_object_get(data, "ts");
+			myList.timeStamp = json_integer_value(ts);
+
+			fprintf(logfile, "filename: %s\nnodeId: %s\nsize: %llu\ntime: %lu\n", myList.fileName, myList.nodeId, myList.size, myList.timeStamp);
+		}
+
+		fprintf(logfile, "count: %u\n", json_object_size(data));
+	}
+
+	free(enckey);
+	free(attributes);
+
+
+	json_decref(root);
 	return 0;
 }
 
-int parseMegaFileResponse(char *jsonString, char *url, u8 *aeskey, char *filename, u32 *size) {
-	int i, r;
-	char *buf;
-	jsmn_parser p;
-	jsmntok_t t[128]; /* We expect no more than 128 tokens */
+int parseMegaFileResponse(char *buf, char *url, char *attributes, u32 *size) {
+	size_t i;
+	json_t *root;
+	json_error_t error;
 
-	jsmn_init(&p);
-	r = jsmn_parse(&p, jsonString, strlen(jsonString), t, sizeof(t)/sizeof(t[0]));
-	if (r < 0) {
-		printf("Failed to parse JSON: %d\n", r);
+	root = json_loads(buf, 0, &error);
+
+	if (!root) {
+		fprintf(logfile,"Failed to parse JSON: %s\n", error.text);
 		return 1;
 	}
 
-	/* Assume the top-level element is an object */
-	if (r < 1 || t[0].type != JSMN_ARRAY) {
-		printf("Array expected\n");
-		return 1;
+	if(!json_is_array(root)){
+		printf("error: root is not an array\n");
+		goto stop;
 	}
 
-	/* Loop over all keys of the root object */
-	for (i = 2; i < r; i++) {
-		if (jsoneq(jsonString, &t[i], "s") == 0) { // size
-			*size = strtoul(jsonString + t[i+1].start, NULL, 10);
-			i++;
-		} else if (jsoneq(jsonString, &t[i], "at") == 0) { // filename
-			// This will be base64 encoded, allocate with padding.
-			buf=(char*)malloc(t[i+1].end-t[i+1].start + 1 + ((t[i+1].end-t[i+1].start * 3) & 0x03) );
-			memset(buf,0,t[i+1].end-t[i+1].start + 1 + ((t[i+1].end-t[i+1].start * 3) & 0x03));
-			strncpy(buf,jsonString + t[i+1].start,t[i+1].end-t[i+1].start);
-			buf[t[i+1].end-t[i+1].start + ((t[i+1].end-t[i+1].start * 3) & 0x03)] = (char)NULL;
-			decodeMegaAttributes(buf, aeskey, filename);
-			free(buf);
-			i++;
-		} else if (jsoneq(jsonString, &t[i], "g") == 0) { // url
-			strncpy(url,jsonString + t[i+1].start,t[i+1].end-t[i+1].start);
-			url[t[i+1].end-t[i+1].start] = (char)NULL;
-			i++;
+	for(i = 0; i < json_array_size(root); i++) {
+		json_t *data, *s, *at, *g;
+
+		data = json_array_get(root, i);
+		if(!json_is_object(data)) {
+			printf("error: commit data %d is not an object\n", i + 1);
+			goto stop;
 		}
+
+		s = json_object_get(data, "s");
+		*size = json_integer_value(s);
+
+		at = json_object_get(data, "at");
+		strcpy(attributes, json_string_value(at));
+
+		g = json_object_get(data, "g");
+		strcpy(url, json_string_value(g));
+
+		//printf("s-at-g: %lu, %s, %s\n", *size, attributes, url);
 	}
+
+	stop:
+	json_decref(root);
 	return 0;
 }
 
@@ -205,7 +226,7 @@ int fetchMegaDataCallback(void *buf, u32 bufSize, u32 *bufFill){
 }
 
 
-char* base64urldecode(char *str, size_t *olen){
+char* decodeURLbase64(char *str, size_t *olen){
 	int i;
 	int len = strlen(str);
         int newlen = len + ((len * 3) & 0x03);
@@ -217,7 +238,7 @@ char* base64urldecode(char *str, size_t *olen){
 	// Pad as needed.
 	for(i = 0; i < newlen; i++){
 		if(buf[i] == '-')
-			buf[i] = '+';
+			buf[i] = '+'; //+
 		else if(buf[i] == '_')
 			buf[i] = '/';
 
@@ -225,43 +246,48 @@ char* base64urldecode(char *str, size_t *olen){
 			buf[i] = '=';
 	}
 	buf[newlen] = 0;
-
-	//printf("buf: %s\nlen: %i\nnewlen: %i\n", buf, len, newlen);
-	mbedtls_base64_decode(NULL, 0, olen, (const unsigned char*)buf, newlen);
-	//printf("olen: %u\n", *olen);
-	mbedtls_base64_decode((unsigned char*)str, *olen, olen, (const unsigned char*)buf, newlen);
-	str[*olen] = 0; // string terminator
+	mbedtls_base64_decode((unsigned char*)str, 0x1000, olen, (const unsigned char*)buf, newlen);
 
 	free(buf);
 	return str;
 }
 
+char* decryptStringCBC(char *str, size_t bufSize, u8 *aeskey) {
+	decryptBufferCBC(str, bufSize, aeskey);
+	str[bufSize] = 0; // NULL terminate
+	return str;
+}
+
 char* decryptBufferCBC(char *str, size_t bufSize, u8 *aeskey) {
 	unsigned char zeroiv[16]={0};
-	
         mbedtls_aes_context aes;
         mbedtls_aes_setkey_dec( &aes, aeskey, 128 );
         char *buf = (char*)malloc(bufSize);
-	strncpy(buf, str, bufSize);
+	memcpy(buf, str, bufSize);
         mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, bufSize, &zeroiv[0], (unsigned char*) buf, (unsigned char*) str);
         mbedtls_aes_free( &aes );
 	free(buf);
 	return str;
 }
 
-char* decodeMegaAESKey(char *str, u8 *aeskey, u8 *aesiv, u8 *folderkey)
-{
+char* decryptBufferECB(char *str, size_t bufSize, u8 *aeskey) {
+	size_t i;
+        mbedtls_aes_context aes;
+        mbedtls_aes_setkey_dec( &aes, aeskey, 128 );
+        char *buf = (char*)malloc(bufSize);
+	memcpy(buf, str, bufSize);
+	for(i = 0; i < bufSize; i+=16) {
+		mbedtls_aes_crypt_ecb( &aes, MBEDTLS_AES_DECRYPT, (unsigned char*)buf+i, (unsigned char*)str+i);
+	}
+        mbedtls_aes_free( &aes );
+	free(buf);
+	return str;
+}
+
+char* decodeMegaAESKey(char *str, u8 *aeskey, u8 *aesiv) {
 	u64 *aeskey_64 = (u64*) aeskey;
 	u64 *aesiv_64 = (u64*) aesiv;
-	size_t len = 0;
 	u64 *str_64;
-
-	base64urldecode(str, &len);
-	//printf(" str: %s\n", str);
-
-	if(folderkey!=NULL){
-		str = decryptBufferCBC(str, len, folderkey);
-	}
 
 	str_64 = (u64*) str;
 	aeskey_64[0] = str_64[0] ^ str_64[2];
@@ -272,8 +298,9 @@ char* decodeMegaAESKey(char *str, u8 *aeskey, u8 *aesiv, u8 *folderkey)
 	return str;
 }
 
-int decodeMegaURL (char *url, int *nodeType, char *nodeId, u8 *aeskey, u8 *aesiv){
+int decodeMegaURL(char *url, int *nodeType, char *nodeId, u8 *aeskey, u8 *aesiv) {
 	Result ret=0;
+	size_t olen=0;
 	char *ptr, *locptr, *keyptr, *keybuf;
 
 	*nodeType=MEGA_NODETYPE_UNDEF;
@@ -293,8 +320,12 @@ int decodeMegaURL (char *url, int *nodeType, char *nodeId, u8 *aeskey, u8 *aesiv
 	free(buf);
 
 	//printf("keybuf: %s\n", keybuf);
-	decodeMegaAESKey(keybuf, aeskey, aesiv, NULL);
-
+	decodeURLbase64(keybuf, &olen);
+	if(*nodeType==MEGA_NODETYPE_FILE){
+		decodeMegaAESKey(keybuf, aeskey, aesiv);
+	} else {
+		memcpy(aeskey, keybuf, 16);
+	}
 	free(keybuf);
 	return ret;
 }
@@ -337,7 +368,7 @@ int doMegaInstallCIA (char *url, u8 *aeskey, u8 *aesiv, app::App *app){
 	return ret;
 }
 
-int requestMegaNodeInfo (char **buf, int *nodeType, char *nodeId, u8 *aeskey, u8 *aesiv){
+int requestMegaNodeInfo (char **buf, int *nodeType, char *nodeId){
 	Result ret=0;
 
 	u8 *req;
@@ -401,22 +432,35 @@ int doMegaInstall (char *url){
 	aeskey = (u8*)malloc(128 / 8);
 	aesiv = (u8*)malloc(128 / 8);
 
+	logfile = fopen("output.txt","w+");
+
 	printf("Processing %s\n",url);
 
 	decodeMegaURL(url, &nodeType, nodeId, aeskey, aesiv);
 
 	char *buf = (char*)malloc(0x1000); 
-	requestMegaNodeInfo(&buf, &nodeType, nodeId, aeskey, aesiv);
+	requestMegaNodeInfo(&buf, &nodeType, nodeId);
 
 	//printf ("buf: %s\n", buf);
-	char *filename = (char*)malloc(0x1000);
-	u32 filesize = 0;
-	parseMegaFileResponse(buf, url, aeskey, filename, &filesize);
-	//printf("file: %s\n", filename);
-	free(buf);
-	free(filename);
 
-//	return 0;
+if(nodeType == MEGA_NODETYPE_FOLDER){
+	parseMegaFolderResponse(buf, aeskey, NULL);
+	return 0;
+}
+
+	char *attributes = (char*)malloc(0x1000);
+	u32 filesize = 0;
+	parseMegaFileResponse(buf, url, attributes, &filesize);
+	app.size = filesize;
+	app.mediaType = fs::SD;
+	free(buf);
+
+	size_t olen;
+	char *filename = (char*)malloc(0x1000);
+	parseMegaFileAttributes(decryptStringCBC(decodeURLbase64(attributes, &olen), olen, aeskey), filename);
+	//printf("file: %s\nsize: %lu\n", filename, filesize);
+	free(filename);
+	free(attributes);
 
 	ret = getMegaTitleId(url, aeskey, aesiv, &app);
 	if(ret!=0)return ret;
@@ -453,6 +497,7 @@ int doMegaInstall (char *url){
 		if (hid::pressed(hid::BUTTON_B))
 			break;
 	}
+	fclose(logfile);
 	free(nodeId);
 	free(aeskey);
 	free(aesiv);
