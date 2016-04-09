@@ -29,7 +29,7 @@ int parseMegaFileAttributes(char *buf, char *filename) {
 	json_error_t error;
 
 	if(strncmp("MEGA", buf, 4)!=0){
-		fprintf(logfile, "MEGA magic string not found.\nDecryption key bad/missing?\n");
+		printf("MEGA magic string not found.\nDecryption key bad/missing?\n");
 		return 1;
 	}
 	buf+=4; // Skip over MEGA magic.
@@ -38,7 +38,7 @@ int parseMegaFileAttributes(char *buf, char *filename) {
 	data = json_loads(buf, 0, &error);
 
 	if (!data) {
-		fprintf(logfile, "Failed to parse JSON: %s\n", error.text);
+		printf("Failed to parse JSON: %s\n", error.text);
 		filename[0] = 0; //end string
 //svcSleepThread(5000000000);
 		return 1;
@@ -63,7 +63,7 @@ int parseMegaFolderResponse(char *buf, u8 *aeskey, void *folderList) {
 	root = json_loads(buf, 0, &error);
 
 	if (!root) {
-		fprintf(logfile, "Failed to parse JSON: %s\n", error.text);
+		printf("Failed to parse JSON: %s\n", error.text);
 		return 1;
 	}
 
@@ -101,10 +101,10 @@ int parseMegaFolderResponse(char *buf, u8 *aeskey, void *folderList) {
 			ts = json_object_get(data, "ts");
 			myList.timeStamp = json_integer_value(ts);
 
-			fprintf(logfile, "filename: %s\nnodeId: %s\nsize: %llu\ntime: %lu\n", myList.fileName, myList.nodeId, myList.size, myList.timeStamp);
+			printf("filename: %s\nnodeId: %s\nsize: %llu\ntime: %lu\n", myList.fileName, myList.nodeId, myList.size, myList.timeStamp);
 		}
 
-		fprintf(logfile, "count: %u\n", json_object_size(data));
+		printf("count: %u\n", json_object_size(data));
 	}
 
 	free(enckey);
@@ -338,7 +338,7 @@ int getMegaTitleId (char *url, u8 *aeskey, u8 *aesiv, app::App *app){
 	u32 statuscode;
 
 	ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
-	ret=httpcSetSSLOpt(&context, 1<<9);
+	ret=httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 	ret=httpcAddRequestHeaderField(&context, (char*)"Range", (char*)"bytes=11292-11299");
 	ret=httpcBeginRequest(&context);
 	httpcGetResponseStatusCode(&context, &statuscode, 0);
@@ -360,7 +360,7 @@ int doMegaInstallCIA (char *url, u8 *aeskey, u8 *aesiv, app::App *app){
 	megaInstallIV = aesiv;
 
 	ret=httpcOpenContext(&context, HTTPC_METHOD_GET, url, 0);
-	ret=httpcSetSSLOpt(&context, 1<<9);
+	ret=httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 	ret=httpcBeginRequest(&context);
 	httpcGetResponseStatusCode(&context, &statuscode, 0); 
 	app::install(app->mediaType, &fetchMegaDataCallback, app->size, &onProgress);
@@ -393,7 +393,7 @@ int requestMegaNodeInfo (char **buf, int *nodeType, char *nodeId){
 	//printf("url: %s \npost: %s\npost length: %u\n", requrl, req, reqlen);
 
 	httpcOpenContext(&context, HTTPC_METHOD_POST, requrl, 0);
-	httpcSetSSLOpt(&context, 1<<9);
+	httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 	httpcAddPostDataRaw(&context, (u32*)req, reqlen);
 
 	httpcBeginRequest(&context);

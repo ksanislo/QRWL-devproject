@@ -7,7 +7,6 @@
 #include <inttypes.h>
 #include <string.h>
 
-#define SSLOPTION_NOVERIFY 1<<9
 #define WIDTH 400
 #define HEIGHT 240
 #define WAIT_TIMEOUT 300000000ULL

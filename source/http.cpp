@@ -47,7 +47,7 @@ Result http_getinfo(char *url, app::App *app){
 	}
 
 	// Disable the SSL certificate checks.
-	ret = httpcSetSSLOpt(&context, SSLOPTION_NOVERIFY);
+	ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 	if(ret!=0){
 		goto stop;
 	}
@@ -125,7 +125,7 @@ Result http_download(char *url, app::App *app){
 	*/
 
 	// Disable the SSL certificate checks.
-	ret = httpcSetSSLOpt(&context, 1<<9);
+	ret = httpcSetSSLOpt(&context, SSLCOPT_DisableVerify);
 	if(ret!=0){
 		goto stop;
 	}

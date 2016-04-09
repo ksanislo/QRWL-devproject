@@ -1,4 +1,5 @@
 #include <citrus/app.hpp>
+#include <3ds.h>
 
 extern "C" {
 #include <jsmn.h>
